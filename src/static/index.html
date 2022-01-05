@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta name="viewport" content="width=device-width" />
+
+        <style>
+            body {
+                font-family: Tahoma, Geneva, sans-serif;
+            }
+
+            .player {
+                background-color: hsl(302, 100%, 50%);
+                position: absolute;
+                left: 300px;
+                top: 0;
+                padding: 5px;
+                border-radius: 8px;
+                color: white;
+                text-shadow: 1px 1px black;
+            }
+        </style>
+
+        <!-- colyseus.js client -->
+        <script
+            type="text/javascript"
+            src="https://unpkg.com/colyseus.js@^0.14.0/dist/colyseus.js"
+        ></script>
+        <script src="https://cdn.jsdelivr.net/npm/tweakpane@3.0.7/dist/tweakpane.min.js"></script>
+    </head>
+    <body>
+        <strong>Messages</strong><br />
+
+        <form id="form">
+            <input type="text" id="input" value="" />
+            <input type="submit" value="send" />
+        </form>
+
+        <div id="messages"></div>
+        <div id="players">
+            <div style="display: none" id="playerTemplate" class="player">
+                NAME
+            </div>
+        </div>
+
+        <script>
+            var host = window.document.location.host.replace(/:.*/, "");
+            var client = new Colyseus.Client(
+                location.protocol.replace("http", "ws") +
+                    "//" +
+                    host +
+                    (location.port ? ":" + location.port : "")
+            );
+            let tickRate = 1000 / 30;
+            const playerMoveSpeed = 100;
+            let delta = 0;
+            let lastDelta = new Date();
+            const inputs = {
+                w: false,
+                s: false,
+                a: false,
+                d: false,
+            };
+
+            const PARAMS = {
+                speed: 30,
+            };
+            const pane = new Tweakpane.Pane();
+            pane.addInput(PARAMS, "speed", {
+                step: 1,
+                min: 1,
+                max: 100,
+            }).on("change", (ev) => {
+                tickRate = 1000 / ev.value;
+                startUpdate();
+            });
+
+            let updateInterval;
+            let playerEl;
+
+            client.joinOrCreate("chat").then((room) => {
+                console.log("joined", room);
+
+                playerEl = document
+                    .querySelector("#playerTemplate")
+                    .cloneNode(true);
+                playerEl.style.display = "block";
+                document.body.appendChild(playerEl);
+                playerEl.innerText = room.sessionId;
+                playerEl.style.backgroundColor =
+                    "hsl(" + Math.floor(Math.random() * 360) + ", 80%, 50%)";
+
+                document.onkeydown = (ev) => {
+                    if (ev.code === "KeyW") inputs.w = true;
+                    if (ev.code === "KeyS") inputs.s = true;
+                    if (ev.code === "KeyD") inputs.a = true;
+                    if (ev.code === "KeyA") inputs.d = true;
+                };
+                document.onkeyup = (ev) => {
+                    if (ev.code === "KeyW") inputs.w = false;
+                    if (ev.code === "KeyS") inputs.s = false;
+                    if (ev.code === "KeyD") inputs.a = false;
+                    if (ev.code === "KeyA") inputs.d = false;
+                };
+
+                startUpdate();
+
+                room.onStateChange.once(function (state) {
+                    console.log("initial room state:", state);
+                });
+
+                // new room state
+                room.onStateChange(function (state) {
+                    // this signal is triggered on each patch
+                });
+
+                // listen to patches coming from the server
+                room.onMessage("messages", function (message) {
+                    var p = document.createElement("p");
+                    p.innerText = message;
+                    document.querySelector("#messages").appendChild(p);
+                });
+
+                room.onMessage("playerSessionID", (msg) => {
+                    console.log("You are id:", msg);
+                });
+
+                // send message to room on submit
+                document.querySelector("#form").onsubmit = function (e) {
+                    e.preventDefault();
+
+                    var input = document.querySelector("#input");
+
+                    console.log("input:", input.value);
+
+                    // send data to room
+                    room.send("message", input.value);
+
+                    // clear input
+                    input.value = "";
+                };
+            });
+            
+            function startUpdate() {
+                if(updateInterval) {
+                    clearInterval(updateInterval);
+                }
+
+                updateInterval = setInterval(() => {
+                    delta = (new Date() - lastDelta) / 1000;
+                    lastDelta = new Date();
+
+                    const playerBCR = playerEl.getBoundingClientRect();
+                    if (inputs.w) {
+                        playerEl.style.top =
+                            playerBCR.top - playerMoveSpeed * delta + "px";
+                    }
+                    if (inputs.s) {
+                        playerEl.style.top =
+                            playerBCR.top + playerMoveSpeed * delta + "px";
+                    }
+                    if (inputs.a) {
+                        playerEl.style.left =
+                            playerBCR.left + playerMoveSpeed * delta + "px";
+                    }
+                    if (inputs.d) {
+                        playerEl.style.left =
+                            playerBCR.left - playerMoveSpeed * delta + "px";
+                    }
+                }, tickRate);
+            }
+        </script>
+    </body>
+</html>
